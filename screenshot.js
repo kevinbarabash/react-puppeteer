@@ -1,11 +1,13 @@
 const fs = require("fs");
 const path = require("path");
 const puppeteer = require('puppeteer');
+const {promisify} = require('util');
+
+const readFileAsync = promisify(fs.readFile);
 
 async function screenshot(page, name, markup) {
-  // console.log(`generating screenshot for ${name}`);
+  console.log(`processing ${name}`);
   const url = `http://localhost:1234/index.html?markup=${encodeURIComponent(markup)}`;
-  console.log(url);
   await page.goto(url);
 
   const aHandle = await page.evaluateHandle(() => document.body);
@@ -14,7 +16,6 @@ async function screenshot(page, name, markup) {
 
   const bHandle = await page.evaluateHandle(() => document.body.children[0]);
   const bounds = await bHandle.boundingBox();
-  console.log(bounds);
 
   await page.screenshot({path: `screenshots/${name}.png`, clip: bounds});
 }
@@ -25,8 +26,6 @@ async function screenshot(page, name, markup) {
   const pages = [
     await browser.newPage(),
     await browser.newPage(),
-    await browser.newPage(),
-    await browser.newPage(),
   ];
 
   const consoleHandler =  msg => {
@@ -35,22 +34,25 @@ async function screenshot(page, name, markup) {
     });
   };
 
-  pages.forEach(page => page.on("console", consoleHandler));
-
-  // TODO(kevinb): use Promise.race to spread work over a finite number of 
-  // pages
+  pages.forEach(page => {
+    page.on("console", consoleHandler);
+    page.setViewport({
+      width: 600,
+      height: 600,
+    });
+  });
 
   const files = fs.readdirSync("tests").filter(file => path.extname(file) === ".html");
 
-  await Promise.all(files.map((file, i) => new Promise((resolve, reject) => {
-    fs.readFile(path.join("tests", file), "utf8", (err, data) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(screenshot(pages[i], path.basename(file, ".html"), data));
+  while (files.length > 0) {
+    // TODO(kevinb): rewrite to use Promise.race so that we don't have to wait
+    // for pages to complete before starting other tests.
+    await Promise.all(pages.slice(0, Math.min(pages.length, files.length)).map(async (page) => {
+      const file = files.shift();
+      const contents = await readFileAsync(path.join("tests", file), "utf8");
+      await screenshot(page, path.basename(file, ".html"), contents);
+    }));
       }
-    });
-  })));
 
   await browser.close();
 })();
