@@ -1,5 +1,3 @@
-import Foo from "../components/foo.js";
-
 const {StyleSheet, css} = aphrodite;
 
 const styles = StyleSheet.create({

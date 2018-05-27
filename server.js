@@ -5,11 +5,63 @@ const url = require("url");
 const babel = require("babel-core");
 const babylon = require("babylon");
 const t = require("babel-types");
+const traverse = require("babel-traverse").default;
 
 const port = 4444;
 
-const wrapLastJsxStatement = ast => {
+const preprocessImports = (data) => {
+  // TODO: make these replacements more robust
+  const lines = data.split("\n").map(line => {
+    if (line.endsWith(`from "react";`)) {
+      return ""; // React is a global in the test environment
+    } else if (line.endsWith(`from "react-dom";`)) {
+      return ""; // ReactDOM is a global in the test environment
+    } else if (line.endsWith(`from "aphrodite";`)) {
+      // aphrodite is global
+      return line.replace("import", "const").replace(`from "aphrodite"`, '= aphrodite;');
+    } else {
+      return line;
+    }
+  });
+  return lines.join("\n");
+};
+
+const injectImports = (ast) => {
+  const customComponents = [];
+        
+  traverse(ast, {
+    enter(path) {
+      // console.log(path);
+      if (path.isJSXIdentifier()) {
+        if (/^[A-Z]/.test(path.node.name) && path.parent.type === "JSXOpeningElement") {
+          customComponents.push(path.node.name);
+        }
+      }
+    }
+  });
+
+  ast.program.body = [
+    ...customComponents.map(identifier => 
+      t.importDeclaration(
+        [
+          t.importDefaultSpecifier(t.identifier(identifier))
+        ],
+        t.stringLiteral(componentFileMap[identifier]),
+      )
+    ),
+    ...ast.program.body,
+  ];
+}
+
+const maybeWrapLastJsxStatement = ast => {
   const lastStatement = ast.program.body[ast.program.body.length - 1];
+  const isJSXElement = lastStatement.expression &&
+    lastStatement.expression.type === "JSXElement";
+
+  if (!isJSXElement) {
+    return;
+  }
+
   const wrappedStatement = t.callExpression(
     t.memberExpression(
       t.identifier("ReactDOM"),
@@ -50,31 +102,16 @@ const requestHandler = (req, res) => {
     fs.exists(filename, exists => {
       if (exists) {
         fs.readFile(filename, "utf8", (err, data) => {
-          // TODO: make these replacements more robust
-          const lines = data.split("\n").map(line => {
-            if (line.endsWith(`from "react";`)) {
-              return ""; // React is a global in the test environment
-            } else if (line.endsWith(`from "react-dom";`)) {
-              return ""; // ReactDOM is a global in the test environment
-            } else if (line.endsWith(`from "aphrodite";`)) {
-              // aphrodite is global
-              return line.replace("import", "const").replace(`from "aphrodite"`, '= aphrodite;');
-            } else {
-              return line;
-            }
-          });
-          data = lines.join("\n");
+          data = preprocessImports(data);
+
           const ast = babylon.parse(data, {
             plugins: ["jsx", "flow"],
             sourceType: "module"
           });
-          const lastStatement = ast.program.body[ast.program.body.length - 1];
-          if (
-            lastStatement.expression &&
-            lastStatement.expression.type === "JSXElement"
-          ) {
-            wrapLastJsxStatement(ast);
-          }
+
+          injectImports(ast);
+          maybeWrapLastJsxStatement(ast);
+
           const output = babel.transformFromAst(ast, data, {
             presets: ["react"]
           });
@@ -87,18 +124,37 @@ const requestHandler = (req, res) => {
           res.end();
         });
       } else {
-        // raise 404
+        // TODO: raise 404
       }
     });
   }
   console.log(pathname);
 };
 
-const server = http.createServer(requestHandler);
+const componentFileMap = {};
 
-server.listen(port, err => {
+// TODO: recursively find components
+fs.readdir("components", (err, files) => {
   if (err) {
-    return console.log("something bad happened", err);
+    console.err("couldn't read components");
+    process.exit(1);
   }
-  console.log(`server is listening on ${port}`);
+
+  files.forEach(file => {
+    const src = fs.readFileSync(path.join("components", file), "utf8");
+    const match = src.match(/export default class ([^ ]+)/);
+    componentFileMap[match[1]] = path.join("../components", file);
+  });
+
+  console.log("Found components");
+  console.log(componentFileMap);
+
+  const server = http.createServer(requestHandler);
+
+  server.listen(port, err => {
+    if (err) {
+      return console.log("something bad happened", err);
+    }
+    console.log(`server is listening on ${port}`);
+  });
 });
