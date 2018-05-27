@@ -8,9 +8,9 @@ const babylon = require("babylon");
 const readFileAsync = promisify(fs.readFile);
 
 (async () => {
+  const startLaunch = Date.now();
   const browser = await puppeteer.launch();
-
-  const pages = [await browser.newPage(), await browser.newPage()];
+  console.log("launch: " + (Date.now() - startLaunch));
 
   const consoleHandler = msg => {
     msg.args().forEach(arg => {
@@ -18,13 +18,17 @@ const readFileAsync = promisify(fs.readFile);
     });
   };
 
-  pages.forEach(page => {
+  const startGoto = Date.now();
+  const pages = [await browser.newPage(), await browser.newPage()];
+  await Promise.all(pages.map(async (page) => {
+    await page.goto("http://localhost:4444");
     page.on("console", consoleHandler);
     page.setViewport({
       width: 600,
       height: 600
     });
-  });
+  }));
+  console.log("goto: " + (Date.now() - startGoto));
 
   const files = fs
     .readdirSync("tests")
@@ -36,22 +40,44 @@ const readFileAsync = promisify(fs.readFile);
     await Promise.all(
       pages.slice(0, Math.min(pages.length, files.length)).map(async page => {
         const file = files.shift();
-        const contents = await readFileAsync(path.join("tests", file), "utf8");
+
+        // load test code
+        const startEval = Date.now();
+        await page.evaluate((test) => {
+          const script = document.createElement('script');
+          script.setAttribute('src', `/tests/${test}`);
+          script.setAttribute('type', 'module');
+          document.body.appendChild(script);
+        }, file);
+        console.log("eval elapsed: " + (Date.now() - startEval));
+        
+        // wait for rendering to complete
+        await page.waitForSelector(".complete");
+
+        // save screenshot
+        const startScreenshot = Date.now();
+        const bounds = await page.evaluate(() => {
+          const container = document.querySelector("#container");
+          return {
+            x: container.offsetLeft,
+            y: container.offsetTop,
+            width: container.offsetWidth,
+            height: container.offsetHeight,
+          };
+        });
         const name = path.basename(file, ".js");
+        await page.screenshot({ 
+          path: `screenshots/${name}.png`, 
+          clip: bounds,
+        });
+        console.log("screenshot elapsed: " + (Date.now() - startScreenshot));
 
-        console.log(`processing ${name}`);
-        const url = `http://localhost:4444/?test=${file}`;
-        console.log(url);
-        await page.goto(url);
-
-        const aHandle = await page.evaluateHandle(() => document.body);
-        const heightHandle = await aHandle.getProperty("offsetHeight");
-        const height = await heightHandle.jsonValue();
-
-        const bHandle = await page.evaluateHandle(() => document.body.children[0]);
-        const bounds = await bHandle.boundingBox();
-
-        await page.screenshot({ path: `screenshots/${name}.png`, clip: bounds });
+        // reset for next test
+        await page.evaluate(() => {
+          const container = document.querySelector("#container");
+          ReactDOM.unmountComponentAtNode(container);
+          container.classList.remove("complete");
+        });
       })
     );
   }

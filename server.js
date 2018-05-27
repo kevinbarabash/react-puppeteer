@@ -78,6 +78,25 @@ const maybeWrapLastJsxStatement = ast => {
           t.stringLiteral("#container"),
         ],
       ),
+      t.arrowFunctionExpression(
+        [], 
+        t.callExpression(
+          t.memberExpression(
+            t.memberExpression(
+              t.callExpression(
+                t.memberExpression(
+                  t.identifier("document"),
+                  t.identifier("querySelector"),
+                ),
+                [t.stringLiteral("#container")],
+              ),
+              t.identifier("classList"),
+            ),
+            t.identifier("add"),
+          ),
+          [t.stringLiteral("complete")],
+        ),
+      ),
     ],
   );
 
