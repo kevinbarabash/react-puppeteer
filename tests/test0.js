@@ -1,5 +1,17 @@
-const title = <h1>Hello, world</h1>;
+const {StyleSheet, css} = aphrodite;
 
-<div style={{background: "lightblue"}}>
+const styles = StyleSheet.create({
+  title: {
+    fontSize: 64,
+  },
+  wrapper: {
+    background: "darkBlue",
+    color: "white",
+  },
+});
+
+const title = <h1 className={css(styles.title)}>Hello, world</h1>;
+
+<div className={css(styles.wrapper)}>
   {title}
 </div>
