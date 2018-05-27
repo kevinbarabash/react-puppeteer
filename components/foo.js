@@ -1,4 +1,5 @@
-const {StyleSheet, css} = aphrodite;
+import * as React from "react";
+import {StyleSheet, css} from "aphrodite";
 
 export default class Foo extends React.Component {
     render() {

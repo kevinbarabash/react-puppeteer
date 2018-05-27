@@ -41,6 +41,7 @@ const readFileAsync = promisify(fs.readFile);
 
         console.log(`processing ${name}`);
         const url = `http://localhost:4444/?test=${file}`;
+        console.log(url);
         await page.goto(url);
 
         const aHandle = await page.evaluateHandle(() => document.body);

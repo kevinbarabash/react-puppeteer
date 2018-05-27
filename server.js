@@ -56,6 +56,20 @@ const requestHandler = (req, res) => {
     fs.exists(filename, exists => {
       if (exists) {
         fs.readFile(filename, "utf8", (err, data) => {
+          // TODO: make these replacements more robust
+          const lines = data.split("\n").map(line => {
+            if (line.endsWith(`from "react";`)) {
+              return ""; // React is a global in the test environment
+            } else if (line.endsWith(`from "react-dom";`)) {
+              return ""; // ReactDOM is a global in the test environment
+            } else if (line.endsWith(`from "aphrodite";`)) {
+              // aphrodite is global
+              return line.replace("import", "const").replace(`from "aphrodite"`, '= aphrodite;');
+            } else {
+              return line;
+            }
+          });
+          data = lines.join("\n");
           const ast = babylon.parse(data, {
             plugins: ["jsx", "flow"],
             sourceType: "module"
@@ -83,9 +97,7 @@ const requestHandler = (req, res) => {
       }
     });
   }
-
   console.log(pathname);
-  // response.end("Hello Node.js Server!");
 };
 
 const server = http.createServer(requestHandler);

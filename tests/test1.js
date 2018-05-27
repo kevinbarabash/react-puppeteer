@@ -1,3 +1,7 @@
 import Foo from "../components/foo.js";
+import Bar from "../components/bar.js";
 
-<Foo/>
+<div>
+  <Foo/>
+  <Bar/>
+</div>
