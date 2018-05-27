@@ -1,3 +1,5 @@
+const title = <h1>Hello, world</h1>;
+
 <div style={{background: "lightblue"}}>
-  <h1>Hello, world</h1>
+  {title}
 </div>
