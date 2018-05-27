@@ -7,58 +7,6 @@ const babylon = require("babylon");
 
 const readFileAsync = promisify(fs.readFile);
 
-async function screenshot(page, name, type, value) {
-  console.log(`processing ${name}`);
-  const url = `http://localhost:1234/index.html?${type}=${encodeURIComponent(
-    value
-  )}`;
-  console.log(url);
-  await page.goto(url);
-
-  const aHandle = await page.evaluateHandle(() => document.body);
-  const heightHandle = await aHandle.getProperty("offsetHeight");
-  const height = await heightHandle.jsonValue();
-
-  const bHandle = await page.evaluateHandle(() => document.body.children[0]);
-  const bounds = await bHandle.boundingBox();
-
-  await page.screenshot({ path: `screenshots/${name}.png`, clip: bounds });
-}
-
-const wrapLastJsxStatement = (ast) => {
-  const lastStatement = ast.program.body[ast.program.body.length - 1];
-  const wrappedStatement = {
-    type: "CallExpression",
-    callee: {
-      type: "MemberExpression",
-      object: {type: "Identifier", name: "ReactDOM"},
-      property: {type: "Identifier", name: "render"}, 
-    },
-    arguments: [
-      lastStatement.expression,
-      {
-        type: "CallExpression",
-        callee: {
-          type: "MemberExpression",
-          object: {type: "Identifier", name: "document"},
-          property: {type: "Identifier", name: "querySelector"}, 
-        },
-        arguments: [
-          {
-            type: "StringLiteral",
-            value: "#container",
-          }
-        ]
-      }
-    ]
-  };
-
-  ast.program.body = [
-    ...ast.program.body.slice(0, -1),
-    wrappedStatement,
-  ];
-}
-
 (async () => {
   const browser = await puppeteer.launch();
 
@@ -80,8 +28,7 @@ const wrapLastJsxStatement = (ast) => {
 
   const files = fs
     .readdirSync("tests")
-    .filter(file => [".html", ".js"].includes(path.extname(file)));
-    // .slice(0, 1);
+    .filter(file => path.extname(file) === ".js");
 
   while (files.length > 0) {
     // TODO(kevinb): rewrite to use Promise.race so that we don't have to wait
@@ -92,31 +39,18 @@ const wrapLastJsxStatement = (ast) => {
         const contents = await readFileAsync(path.join("tests", file), "utf8");
         const name = path.basename(file, ".js");
 
-        if (path.extname(file) === ".js") {
-          const ast = babylon.parse(contents, { plugins: ["jsx", "flow"] });
-          const lastStatement = ast.program.body[ast.program.body.length - 1];
-          const type =
-            lastStatement.expression &&
-            lastStatement.expression.type === "JSXElement"
-              ? "react"
-              : "code";
-          if (type === "react") {
-            wrapLastJsxStatement(ast);
-            const compiled = babel.transformFromAst(ast, contents, {
-              presets: [["es2015", { loose: true, modules: false }], "react"]
-            });
-            await screenshot(page, name, "code", compiled.code);
-          } else {
-            const compiled = babel.transformFromAst(ast, contents, {
-              presets: [["es2015", { loose: true, modules: false }], "react"]
-            });
-            await screenshot(page, name, "code", compiled.code);
+        console.log(`processing ${name}`);
+        const url = `http://localhost:4444/?test=${file}`;
+        await page.goto(url);
 
-          }
-        } else {
-          const name = path.basename(file, ".html");
-          await screenshot(page, name, "markup", contents);
-        }
+        const aHandle = await page.evaluateHandle(() => document.body);
+        const heightHandle = await aHandle.getProperty("offsetHeight");
+        const height = await heightHandle.jsonValue();
+
+        const bHandle = await page.evaluateHandle(() => document.body.children[0]);
+        const bounds = await bHandle.boundingBox();
+
+        await page.screenshot({ path: `screenshots/${name}.png`, clip: bounds });
       })
     );
   }
