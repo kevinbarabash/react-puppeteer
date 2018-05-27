@@ -1,4 +1,4 @@
-const {StyleSheet, css} = aphrodite;
+import {StyleSheet, css} from "aphrodite";
 
 const styles = StyleSheet.create({
   wrapper: {
