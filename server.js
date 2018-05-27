@@ -4,36 +4,30 @@ const path = require("path");
 const url = require("url");
 const babel = require("babel-core");
 const babylon = require("babylon");
+const t = require("babel-types");
 
 const port = 4444;
 
 const wrapLastJsxStatement = ast => {
   const lastStatement = ast.program.body[ast.program.body.length - 1];
-  const wrappedStatement = {
-    type: "CallExpression",
-    callee: {
-      type: "MemberExpression",
-      object: { type: "Identifier", name: "ReactDOM" },
-      property: { type: "Identifier", name: "render" }
-    },
-    arguments: [
+  const wrappedStatement = t.callExpression(
+    t.memberExpression(
+      t.identifier("ReactDOM"),
+      t.identifier("render"),
+    ),
+    [
       lastStatement.expression,
-      {
-        type: "CallExpression",
-        callee: {
-          type: "MemberExpression",
-          object: { type: "Identifier", name: "document" },
-          property: { type: "Identifier", name: "querySelector" }
-        },
-        arguments: [
-          {
-            type: "StringLiteral",
-            value: "#container"
-          }
-        ]
-      }
-    ]
-  };
+      t.callExpression(
+        t.memberExpression(
+          t.identifier("document"),
+          t.identifier("querySelector"),
+        ),
+        [
+          t.stringLiteral("#container"),
+        ],
+      ),
+    ],
+  );
 
   ast.program.body = [...ast.program.body.slice(0, -1), wrappedStatement];
 };
